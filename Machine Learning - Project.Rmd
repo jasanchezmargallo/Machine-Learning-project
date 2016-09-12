@@ -1,0 +1,103 @@
+---
+title: "Machine Learning - Project"
+output: html_document
+---
+
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants.  
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+# Building the learning model
+We are going to use and compare two of the most extended accurate classifiers: Random forests and Boosting. The model with the highest accuracy will be chosen as the final model.
+
+Loading libraries
+```{r, echo=FALSE}
+library(caret)
+```
+
+Loading the data set
+```{r, echo=TRUE}
+dataUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+
+data <- read.csv(url(dataUrl), na.strings=c("NA","#DIV/0!",""))
+```
+
+## Preprocessing data
+Remove (1) constant and almost constant predictors (zero and near-zero predictors) across samples and (2) predictors that have very few unique values relative to the number of samples and the ratio of the frequency of the most common value to the frequency of the second most common value is large
+```{r, echo=TRUE}
+NZV <- nearZeroVar(data)
+data <- data[, -NZV]
+```
+
+Remove the identification variables
+```{r, echo=TRUE}
+IDVariables <- names(data) %in% c("X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", "cvtd_timestamp", "num_window")
+data <- data[!IDVariables]
+```
+
+Remove variables with more than 50% missing values
+```{r, echo=TRUE}
+varNA <- sapply(colnames(data), function(x) if(sum(is.na(data[, x])) > 0.50*nrow(data))    {return(TRUE)
+}else{ return(FALSE) })
+
+data <- data[, !varNA]
+```
+
+### Principal Component Analysis
+In both models we are going to preprocess the variables using Principal Component Analysis).
+Therefore, we will remove variables highly correlated, including a new set of multivariate variables that explain as much variance and information as possible.  
+
+## Cross validation
+Prediction evaluations will be based on maximizing the accuracy and minimizing the out-of-sample error.
+Cross-validation will be performed by spliting our data set randomly into Training (60% of the data) and Testing (40% of the data) sets.
+```{r, echo=TRUE}
+inTrain <- createDataPartition(y = data$classe, p=0.6, list=FALSE)
+training <- data[inTrain, ]
+testing <- data[-inTrain, ]
+```
+
+### Random Forest
+```{r, echo=TRUE, cache=TRUE, results="hide"}
+set.seed(1234)
+#Fit the "Random Forest" Model with PCA preprocess
+modFitRF <- train(classe ~., data = training, preProcess = "pca", method = "rf")
+```
+
+### Boosting
+```{r, echo=TRUE, cache=TRUE, results="hide"}
+#Fit the "Boosting with trees" Model and with PCA preprocess
+modFitBoost <- train(classe ~., data = training, preProcess = "pca", method = "gbm")
+```
+
+Plots 
+```{r, echo=TRUE, cache=TRUE}
+plot(modFitRF)
+plot(modFitBoost)
+```
+
+### Accuracy and out-of-sample error
+Accuracy is the proportion of correct classified observation over the total sample of the test data set.
+The expected out-of-sample error will correspond to (1 - Accuracy) in the cross validation data. Therefore, the expected value of the out-of-sample error will correspond to the expected number of missclassified observations in the test data set.
+```{r, echo=TRUE}
+## Random Forest
+predictionRF <- predict(modFitRF, testing)
+cmRF <- confusionMatrix(predictionRF, testing$classe)
+print(cmRF)
+
+## Boosting
+predictionBoost <- predict(modFitBoost, testing)
+cmBoost <- confusionMatrix(predictionBoost, testing$classe)
+print(cmBoost)
+```
+
+# Conclusion
+Results show that Random Forest algorithm performs better than Boosting, with a 97.37% of accuracy.
+
+# Prediction on the data set
+```{r, echo=TRUE}
+testUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+dataTest <- read.csv(url(testUrl), na.strings=c("NA","#DIV/0!",""))
+
+predictTest <- predict(modFitRF, dataTest, method = "class")
+predictTest
+```
